@@ -1,6 +1,22 @@
 # HANDOFF
 
-**Last updated:** 2026-04-01 (Sprint 3 complete + DOD scraper fix + alignment live — Claude)
+**Last updated:** 2026-04-02 (Added Spectral Sciences capabilities + Planned Grants.gov/SAM.gov scrapers — Gemini)
+
+---
+
+## What Was Built This Session (Gemini)
+
+- **Spectral Sciences Profile**: Updated `backend/capabilities/seed_capabilities.py` to seed two profiles: "Cory Garms" and "Spectral Sciences".
+- The "Spectral Sciences" profile includes 5 custom capabilities derived from analyzing `ssi_sbir_history.csv`: Hypersonics and Aerothermodynamics, Physics-Informed AI/ML, Synthetic Data and Scene Generation (M&S), Counter-UAS and Advanced Threat Tracking, and Atmospheric Modeling and Space Weather.
+- These profiles are immediately available in the frontend `NavBar.jsx` drop-down for dynamic context switching during draft generation.
+
+## Current Plan / Unfinished Business
+
+- We drafted an `implementation_plan.md` to build out non-SBIR/STTR scrapers (Grants.gov and SAM.gov) to capture BAAs, OTAs, and conventional grants.
+- **Pending Questions for Claude/User**:
+  - Should we obtain a SAM.gov API key or rely on parsing their daily bulk CSV extracts?
+  - Should we update the `solicitations` schema to include a `vehicle_type` column (to distinguish SBIR vs BAA vs OTA)?
+  - Should Grants.gov scraping be filtered by a specific list of technical keywords to avoid ingesting irrelevant grants?
 
 ---
 

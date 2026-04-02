@@ -127,3 +127,17 @@
 - Day 5: React/Vite/TailwindCSS frontend, 3 views, full end-to-end demo
 
 ---
+
+## 2026-04-02 - Day 6: Capability Expansion and Scraper Planning (Gemini)
+
+### Completed
+- Analyzed `ssi_sbir_history.csv` to extract 5 company-wide core competencies based on actual award history.
+- `backend/capabilities/seed_capabilities.py` modified to support multi-profile seeding ("Cory Garms" and "Spectral Sciences").
+- Profile ID 1 renamed to "Cory Garms"; Profile ID 2 created as "Spectral Sciences".
+- Executed `seed_capabilities.py` to populate the production database with 10 total active capabilities across two profiles.
+- Drafted `implementation_plan.md` for integrating Grants.gov (`/search2` API) and SAM.gov (Opportunities API) to capture BAAs and OTAs.
+
+### Next Steps Handoff
+- Execute the Grants.gov and SAM.gov scraper implementations based on user feedback to the open questions.
+
+---
