@@ -17,6 +17,9 @@ export const getAlignment = (id, profileId) =>
 export const triggerAlignment = (id) =>
   api.post(`/solicitations/${id}/align`).then(r => r.data)
 
+export const watchSolicitation = (id, watched) =>
+  api.patch(`/solicitations/${id}/watch`, null, { params: { watched } }).then(r => r.data)
+
 export const triggerScrape = (params = {}) =>
   api.post('/solicitations/scrape', params).then(r => r.data)
 

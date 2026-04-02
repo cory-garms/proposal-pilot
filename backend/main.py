@@ -5,6 +5,7 @@ from backend.database import init_db
 from backend.routers.solicitations import router as solicitations_router
 from backend.routers.capabilities import router as capabilities_router
 from backend.routers.projects import router as projects_router
+from backend.routers.dashboard import router as dashboard_router
 
 
 @asynccontextmanager
@@ -17,7 +18,7 @@ app = FastAPI(title="ProposalPilot API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -26,6 +27,7 @@ app.add_middleware(
 app.include_router(solicitations_router)
 app.include_router(capabilities_router)
 app.include_router(projects_router)
+app.include_router(dashboard_router)
 
 
 @app.get("/health")

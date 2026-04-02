@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getSolicitation, getAlignment, createProject } from '../api/client'
+import { getSolicitation, getAlignment, createProject, triggerAlignment } from '../api/client'
 
 const scoreColor = (score) => {
   if (score >= 0.7) return 'border-green-400 bg-green-50'
@@ -27,14 +27,39 @@ export default function SolicitationDetail() {
   const [alignment, setAlignment] = useState(null)
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [realigning, setRealigning] = useState(false)
   const [error, setError] = useState('')
 
+  const fetchAlignment = useCallback(async () => {
+    try {
+      const profileId = localStorage.getItem('profileId') || '1'
+      const a = await getAlignment(id, profileId)
+      setAlignment(a)
+    } catch (e) {
+      console.error(e)
+    }
+  }, [id])
+
   useEffect(() => {
-    Promise.all([getSolicitation(id), getAlignment(id)])
-      .then(([s, a]) => { setSol(s); setAlignment(a) })
+    getSolicitation(id)
+      .then(setSol)
       .catch(() => setError('Failed to load solicitation'))
       .finally(() => setLoading(false))
-  }, [id])
+    fetchAlignment()
+  }, [id, fetchAlignment])
+
+  const handleRealign = async () => {
+    setRealigning(true)
+    setError('')
+    try {
+      await triggerAlignment(id)
+      await fetchAlignment()
+    } catch (e) {
+      setError('Alignment failed: ' + (e.message || 'unknown'))
+    } finally {
+      setRealigning(false)
+    }
+  }
 
   const handleCreateProject = async () => {
     setCreating(true)
@@ -77,8 +102,14 @@ export default function SolicitationDetail() {
               )}
             </div>
             <h1 className="text-xl font-bold text-gray-900 mb-1">{sol.title}</h1>
-            {sol.deadline && (
-              <p className="text-sm text-gray-500">Deadline: {sol.deadline}</p>
+            {sol.open_date && (
+              <p className="text-sm text-gray-500 mb-1">Open Date: {sol.open_date}</p>
+            )}
+            {sol.close_date && (
+              <p className="text-sm text-gray-500 font-medium">Close Date: <span className="text-gray-900">{sol.close_date}</span></p>
+            )}
+            {!sol.close_date && sol.deadline && (
+              <p className="text-sm text-gray-500 font-medium">Deadline: <span className="text-gray-900">{sol.deadline}</span></p>
             )}
           </div>
           <button
@@ -92,11 +123,20 @@ export default function SolicitationDetail() {
       </div>
 
       {/* Alignment Score Cards */}
-      {alignment?.scores?.length > 0 && (
+      {(alignment?.scores?.length > 0 || realigning) && (
         <div className="mb-6">
-          <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-3">
-            Capability Alignment
-          </h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
+              Capability Alignment
+            </h2>
+            <button
+              onClick={handleRealign}
+              disabled={realigning}
+              className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 disabled:opacity-50 transition-colors"
+            >
+              {realigning ? 'Scoring...' : '🔄 Re-run Alignment'}
+            </button>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {alignment.scores.map((s) => (
               <div

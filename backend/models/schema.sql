@@ -5,16 +5,37 @@ CREATE TABLE IF NOT EXISTS solicitations (
     topic_number TEXT,
     description TEXT,
     deadline    TEXT,
+    open_date   TEXT,
+    close_date  TEXT,
+    release_date TEXT,
+    vehicle_type TEXT NOT NULL DEFAULT 'SBIR',  -- SBIR, STTR, BAA, OTA, Grant
+    watched      INTEGER NOT NULL DEFAULT 0,
     url         TEXT UNIQUE,
     raw_html    TEXT,
     scraped_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS profiles (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL UNIQUE
+);
+
 CREATE TABLE IF NOT EXISTS capabilities (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    name        TEXT NOT NULL UNIQUE,
+    profile_id  INTEGER NOT NULL DEFAULT 1 REFERENCES profiles(id),
+    name        TEXT NOT NULL,
     description TEXT NOT NULL,
-    keywords_json TEXT NOT NULL DEFAULT '[]'
+    keywords_json TEXT NOT NULL DEFAULT '[]',
+    UNIQUE(profile_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS agency_release_schedule (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    agency      TEXT NOT NULL,
+    solicitation_cycle TEXT NOT NULL,
+    expected_release_month TEXT NOT NULL,
+    expected_open_month TEXT NOT NULL,
+    notes       TEXT
 );
 
 CREATE TABLE IF NOT EXISTS projects (
@@ -43,8 +64,17 @@ CREATE TABLE IF NOT EXISTS solicitation_capability_scores (
     PRIMARY KEY (solicitation_id, capability_id)
 );
 
+CREATE TABLE IF NOT EXISTS search_keywords (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    keyword     TEXT NOT NULL UNIQUE,
+    source      TEXT NOT NULL DEFAULT 'manual',  -- 'capability', 'csv', 'manual'
+    active      INTEGER NOT NULL DEFAULT 1,
+    added_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_solicitations_agency   ON solicitations(agency);
 CREATE INDEX IF NOT EXISTS idx_solicitations_deadline ON solicitations(deadline);
 CREATE INDEX IF NOT EXISTS idx_projects_solicitation  ON projects(solicitation_id);
 CREATE INDEX IF NOT EXISTS idx_drafts_project         ON drafts(project_id);
 CREATE INDEX IF NOT EXISTS idx_scores_solicitation    ON solicitation_capability_scores(solicitation_id);
+CREATE INDEX IF NOT EXISTS idx_search_keywords_active ON search_keywords(active);

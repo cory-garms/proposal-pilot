@@ -31,6 +31,7 @@ playwright install chromium
 cp ../.env.example ../.env
 # Edit .env and set ANTHROPIC_API_KEY
 
+cd ..
 uvicorn backend.main:app --reload
 # API available at http://localhost:8000
 # Docs at http://localhost:8000/docs

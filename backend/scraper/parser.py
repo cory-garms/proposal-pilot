@@ -74,14 +74,22 @@ def _parse_meta_p(p: Tag | None) -> tuple[str, str, str, str]:
     return status, release_date, open_date, close_date
 
 
+from datetime import datetime
+
 def _extract_date_after(text: str, label: str) -> str:
-    """Pull the date string that appears after a label in pipe-separated text."""
+    """Pull the date string that appears after a label in pipe-separated text and convert to ISO."""
     if label not in text:
         return ""
     parts = text.split("|")
     for i, part in enumerate(parts):
         if label in part and i + 1 < len(parts):
-            return parts[i + 1].strip()
+            date_str = parts[i + 1].strip()
+            try:
+                # typically "MM/DD/YYYY"
+                dt = datetime.strptime(date_str, "%m/%d/%Y")
+                return dt.strftime("%Y-%m-%d")
+            except ValueError:
+                return date_str
     return ""
 
 

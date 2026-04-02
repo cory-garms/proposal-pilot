@@ -4,6 +4,8 @@ import SolicitationList from './views/SolicitationList'
 import SolicitationDetail from './views/SolicitationDetail'
 import DraftEditor from './views/DraftEditor'
 
+import Dashboard from './views/Dashboard'
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -11,7 +13,8 @@ export default function App() {
         <NavBar />
         <main>
           <Routes>
-            <Route path="/" element={<SolicitationList />} />
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/solicitations" element={<SolicitationList />} />
             <Route path="/solicitations/:id" element={<SolicitationDetail />} />
             <Route path="/projects/:id" element={<DraftEditor />} />
           </Routes>

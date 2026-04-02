@@ -10,8 +10,8 @@ from backend.database import get_connection
 def upsert_solicitation(data: dict) -> int:
     """Insert or update a solicitation by URL. Returns the row id."""
     sql = """
-        INSERT INTO solicitations (agency, title, topic_number, description, deadline, open_date, close_date, release_date, url, raw_html)
-        VALUES (:agency, :title, :topic_number, :description, :deadline, :open_date, :close_date, :release_date, :url, :raw_html)
+        INSERT INTO solicitations (agency, title, topic_number, description, deadline, open_date, close_date, release_date, vehicle_type, url, raw_html)
+        VALUES (:agency, :title, :topic_number, :description, :deadline, :open_date, :close_date, :release_date, :vehicle_type, :url, :raw_html)
         ON CONFLICT(url) DO UPDATE SET
             agency       = excluded.agency,
             title        = excluded.title,
@@ -21,6 +21,7 @@ def upsert_solicitation(data: dict) -> int:
             open_date    = excluded.open_date,
             close_date   = excluded.close_date,
             release_date = excluded.release_date,
+            vehicle_type = excluded.vehicle_type,
             raw_html     = excluded.raw_html,
             scraped_at   = datetime('now')
     """
@@ -30,14 +31,15 @@ def upsert_solicitation(data: dict) -> int:
 
 
 def get_all_solicitations(
-    limit: int = 50, 
-    offset: int = 0, 
-    agency: Optional[str] = None, 
+    limit: int = 50,
+    offset: int = 0,
+    agency: Optional[str] = None,
     exclude_expired: bool = True,
     sort_by: Optional[str] = None,
     sort_desc: bool = False,
     status_filter: Optional[str] = None,
-    profile_id: Optional[str] = "1"
+    profile_id: Optional[str] = "1",
+    watched_only: bool = False,
 ) -> list[dict]:
     sql = """
         SELECT s.*, 
@@ -47,6 +49,9 @@ def get_all_solicitations(
         WHERE 1=1
     """
     params: list = [profile_id, profile_id]
+
+    if watched_only:
+        sql += " AND s.watched = 1"
 
     if agency:
         sql += " AND s.agency = ?"
@@ -83,6 +88,14 @@ def get_solicitation_by_id(solicitation_id: int) -> Optional[dict]:
     with get_connection() as conn:
         row = conn.execute("SELECT * FROM solicitations WHERE id = ?", (solicitation_id,)).fetchone()
     return dict(row) if row else None
+
+
+def set_solicitation_watched(solicitation_id: int, watched: bool) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE solicitations SET watched = ? WHERE id = ?",
+            (1 if watched else 0, solicitation_id),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -213,3 +226,39 @@ def update_draft_content(draft_id: int, content: str) -> None:
             "UPDATE drafts SET content = ? WHERE id = ?",
             (content, draft_id),
         )
+
+
+# ---------------------------------------------------------------------------
+# Search Keywords
+# ---------------------------------------------------------------------------
+
+def get_all_keywords(active_only: bool = False) -> list[dict]:
+    sql = "SELECT * FROM search_keywords"
+    if active_only:
+        sql += " WHERE active = 1"
+    sql += " ORDER BY keyword"
+    with get_connection() as conn:
+        rows = conn.execute(sql).fetchall()
+    return [dict(r) for r in rows]
+
+
+def upsert_keyword(keyword: str, source: str = "manual") -> None:
+    """Insert keyword if not present; never overwrites an existing row's source or active state."""
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO search_keywords (keyword, source) VALUES (?, ?)",
+            (keyword.strip().lower(), source),
+        )
+
+
+def set_keyword_active(keyword_id: int, active: bool) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE search_keywords SET active = ? WHERE id = ?",
+            (1 if active else 0, keyword_id),
+        )
+
+
+def delete_keyword(keyword_id: int) -> None:
+    with get_connection() as conn:
+        conn.execute("DELETE FROM search_keywords WHERE id = ?", (keyword_id,))

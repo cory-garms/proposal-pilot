@@ -3,10 +3,9 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel
 
-from backend.db.crud import get_all_solicitations, get_solicitation_by_id
+from backend.db.crud import get_all_solicitations, get_solicitation_by_id, upsert_solicitation, set_solicitation_watched
 from backend.scraper.sbir_scraper import run as scrape_run
 from backend.scraper.run_scrape import build_db_record
-from backend.db.crud import upsert_solicitation
 
 router = APIRouter(prefix="/solicitations", tags=["solicitations"])
 
@@ -17,8 +16,13 @@ class ScrapeRequest(BaseModel):
     max_detail: int = 50
 
 
+class GrantsScrapeRequest(BaseModel):
+    max_results: int = 200
+
+
 # Shared scrape state so the UI can poll if needed
 _scrape_status: dict = {"running": False, "last_count": 0, "last_error": None}
+_grants_status: dict = {"running": False, "last_stats": None, "last_error": None}
 
 
 @router.get("")
@@ -26,8 +30,24 @@ def list_solicitations(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     agency: Optional[str] = Query(None),
+    exclude_expired: bool = Query(True),
+    sort_by: Optional[str] = Query(None),
+    sort_desc: bool = Query(False),
+    status_filter: Optional[str] = Query(None),
+    profile_id: Optional[str] = Query("1"),
+    watched_only: bool = Query(False),
 ):
-    return get_all_solicitations(limit=limit, offset=offset, agency=agency)
+    return get_all_solicitations(
+        limit=limit,
+        offset=offset,
+        agency=agency,
+        exclude_expired=exclude_expired,
+        sort_by=sort_by,
+        sort_desc=sort_desc,
+        status_filter=status_filter,
+        profile_id=profile_id,
+        watched_only=watched_only,
+    )
 
 
 @router.get("/scrape/status")
@@ -41,6 +61,15 @@ def get_solicitation(solicitation_id: int):
     if not row:
         raise HTTPException(status_code=404, detail="Solicitation not found")
     return row
+
+
+@router.patch("/{solicitation_id}/watch")
+def watch_solicitation(solicitation_id: int, watched: bool = True):
+    row = get_solicitation_by_id(solicitation_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Solicitation not found")
+    set_solicitation_watched(solicitation_id, watched)
+    return {"id": solicitation_id, "watched": watched}
 
 
 @router.post("/scrape")
@@ -71,3 +100,29 @@ async def _run_scrape(req: ScrapeRequest) -> None:
         _scrape_status["last_error"] = str(e)
     finally:
         _scrape_status["running"] = False
+
+
+@router.post("/scrape/grants")
+def trigger_grants_scrape(req: GrantsScrapeRequest, background_tasks: BackgroundTasks):
+    if _grants_status["running"]:
+        raise HTTPException(status_code=409, detail="Grants scrape already in progress")
+    background_tasks.add_task(_run_grants_scrape, req.max_results)
+    return {"message": "Grants.gov scrape started", "max_results": req.max_results}
+
+
+@router.get("/scrape/grants/status")
+def grants_scrape_status():
+    return _grants_status
+
+
+async def _run_grants_scrape(max_results: int) -> None:
+    from backend.scraper.grants_scraper import run_grants_scrape
+    _grants_status["running"] = True
+    _grants_status["last_error"] = None
+    try:
+        stats = run_grants_scrape(max_results=max_results)
+        _grants_status["last_stats"] = stats
+    except Exception as e:
+        _grants_status["last_error"] = str(e)
+    finally:
+        _grants_status["running"] = False

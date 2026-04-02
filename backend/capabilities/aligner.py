@@ -116,9 +116,10 @@ def score_solicitation(
     return results
 
 
-def run_alignment(solicitation_ids: list[int] | None = None, force_api: bool = False) -> dict:
+def run_alignment(solicitation_ids: list[int] | None = None, force_api: bool = False, include_expired: bool = False) -> dict:
     """
     Run alignment for all (or specified) solicitations against all capabilities.
+    Set include_expired=True to score historical/closed solicitations as well.
     Returns stats dict.
     """
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -126,7 +127,7 @@ def run_alignment(solicitation_ids: list[int] | None = None, force_api: bool = F
     if not capabilities:
         return {"error": "No capabilities seeded. Run seed_capabilities.py first."}
 
-    solicitations = get_all_solicitations(limit=10000)
+    solicitations = get_all_solicitations(limit=10000, exclude_expired=not include_expired)
     if solicitation_ids:
         solicitations = [s for s in solicitations if s["id"] in solicitation_ids]
 
