@@ -233,8 +233,11 @@ def run_grants_scrape(max_results: int = 200, delay: float = 0.5) -> dict:
             "close_date": close,
             "release_date": None,
             "vehicle_type": detail["vehicle_type"],
+            "branch": None,
+            "tpoc_json": None,
             "url": f"{GRANTS_BASE}/{opp_id}",
             "raw_html": None,
+            "source": "grants",
         }
 
         try:

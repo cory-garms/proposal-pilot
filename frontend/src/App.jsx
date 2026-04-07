@@ -5,6 +5,8 @@ import SolicitationDetail from './views/SolicitationDetail'
 import DraftEditor from './views/DraftEditor'
 import Dashboard from './views/Dashboard'
 import Keywords from './views/Keywords'
+import Admin from './views/Admin'
+import Capabilities from './views/Capabilities'
 import Login from './views/Login'
 
 function AppShell() {
@@ -22,6 +24,8 @@ function AppShell() {
           <Route path="/solicitations/:id" element={<SolicitationDetail />} />
           <Route path="/projects/:id" element={<DraftEditor />} />
           <Route path="/keywords" element={<Keywords />} />
+          <Route path="/admin" element={<Admin />} />
+          <Route path="/capabilities" element={<Capabilities />} />
         </Routes>
       </main>
     </div>

@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS solicitations (
     watched      INTEGER NOT NULL DEFAULT 0,
     url         TEXT UNIQUE,
     raw_html    TEXT,
+    source      TEXT DEFAULT 'sbir',               -- 'sbir', 'grants', 'sam'
     scraped_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

@@ -47,6 +47,7 @@ def build_db_record(record: dict) -> dict:
         "tpoc_json": record.get("tpoc_json"),
         "url": record.get("url") or "",
         "raw_html": record.get("raw_html"),
+        "source": "sbir",
     }
 
 async def main(max_pages: int, enrich: bool, max_detail: int) -> None:

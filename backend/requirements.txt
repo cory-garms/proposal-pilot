@@ -8,3 +8,5 @@ beautifulsoup4==4.12.3
 python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
+python-docx
+reportlab

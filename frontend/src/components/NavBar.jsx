@@ -51,6 +51,8 @@ export default function NavBar() {
         {link('/', 'Dashboard')}
         {link('/solicitations', 'Solicitations')}
         {link('/keywords', 'Keywords')}
+        {link('/capabilities', 'Capabilities')}
+        {localStorage.getItem('token') && link('/admin', 'Admin')}
       </div>
       
       <div className="flex items-center gap-4 text-sm">

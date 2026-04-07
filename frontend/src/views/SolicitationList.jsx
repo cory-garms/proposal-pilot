@@ -81,21 +81,23 @@ export default function SolicitationList() {
   const [statusFilter, setStatusFilter] = useState('')
   const [sortMode, setSortMode] = useState('alignmentDesc')
   const [savedTab, setSavedTab] = useState(false)
-  const PAGE_SIZE = 25
+  const [sourceFilter, setSourceFilter] = useState('')
+  const [pageSize, setPageSize] = useState(25)
 
-  const fetchPage = useCallback(async (pageNum, agency, status, sort, saved) => {
+  const fetchPage = useCallback(async (pageNum, agency, status, sort, saved, source, size) => {
     setLoading(true)
     try {
       const profileId = localStorage.getItem('profileId') || '1'
       const params = {
-        limit: PAGE_SIZE,
-        offset: pageNum * PAGE_SIZE,
+        limit: size,
+        offset: pageNum * size,
         profile_id: profileId,
         exclude_expired: saved ? false : true,
       }
       if (agency) params.agency = agency
       if (status) params.status_filter = status
       if (saved) params.watched_only = true
+      if (source) params.source = source
 
       if (sort === 'deadlineAsc') { params.sort_by = 'deadline'; params.sort_desc = false }
       if (sort === 'deadlineDesc') { params.sort_by = 'deadline'; params.sort_desc = true }
@@ -103,7 +105,7 @@ export default function SolicitationList() {
 
       const data = await getSolicitations(params)
       setSolicitations(data)
-      setHasMore(data.length === PAGE_SIZE)
+      setHasMore(data.length === size)
     } catch (e) {
       console.error('Failed to fetch solicitations:', e)
       setSolicitations([])
@@ -113,8 +115,8 @@ export default function SolicitationList() {
   }, [])
 
   useEffect(() => {
-    fetchPage(page, agencyFilter, statusFilter, sortMode, savedTab)
-  }, [page, agencyFilter, statusFilter, sortMode, savedTab, fetchPage])
+    fetchPage(page, agencyFilter, statusFilter, sortMode, savedTab, sourceFilter, pageSize)
+  }, [page, agencyFilter, statusFilter, sortMode, savedTab, sourceFilter, pageSize, fetchPage])
 
   const handleWatch = async (e, sol) => {
     e.stopPropagation()
@@ -159,6 +161,12 @@ export default function SolicitationList() {
     setAgencyFilter('')
     setStatusFilter('')
     setSortMode('')
+    setSourceFilter('')
+  }
+
+  const handlePageSizeChange = (e) => {
+    setPageSize(Number(e.target.value))
+    setPage(0)
   }
 
   return (
@@ -167,7 +175,9 @@ export default function SolicitationList() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Solicitations</h1>
-          <p className="text-sm text-gray-500 mt-1">{solicitations.length} loaded</p>
+          <p className="text-sm text-gray-500 mt-1">
+            {solicitations.length} shown &mdash; page {page + 1}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <select
@@ -192,6 +202,16 @@ export default function SolicitationList() {
             <option value="deadlineDesc">Deadline (Latest)</option>
           </select>
           <select
+            value={sourceFilter}
+            onChange={(e) => { setSourceFilter(e.target.value); setPage(0) }}
+            className="border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="">All Sources</option>
+            <option value="sbir">SBIR.gov</option>
+            <option value="grants">Grants.gov</option>
+            <option value="sam">SAM.gov</option>
+          </select>
+          <select
             value={agencyFilter}
             onChange={(e) => { setAgencyFilter(e.target.value); setPage(0) }}
             className="border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-500"
@@ -206,6 +226,15 @@ export default function SolicitationList() {
             <option value="DOE">DOE</option>
             <option value="NOAA">NOAA</option>
             <option value="DOI">DOI</option>
+          </select>
+          <select
+            value={pageSize}
+            onChange={handlePageSizeChange}
+            className="border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            {[25, 50, 75, 100].map(n => (
+              <option key={n} value={n}>{n} / page</option>
+            ))}
           </select>
           {scrapeMsg && <span className="text-sm text-gray-600">{scrapeMsg}</span>}
           <button
@@ -256,6 +285,7 @@ export default function SolicitationList() {
                   <th className="text-left px-4 py-3 font-semibold text-gray-600">Title</th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-600 w-36">TPOC</th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-600 w-32">Deadline</th>
+                  <th className="text-left px-4 py-3 font-semibold text-gray-600 w-20">Source</th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-600 w-44">Top Alignment</th>
                 </tr>
               </thead>
@@ -281,6 +311,18 @@ export default function SolicitationList() {
                     <td className="px-4 py-3 text-gray-900">{sol.title}</td>
                     <td className="px-4 py-3">{renderTpoc(sol)}</td>
                     <td className="px-4 py-3">{renderTiming(sol)}</td>
+                    <td className="px-4 py-3">
+                      {sol.source && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                          sol.source === 'sbir'   ? 'bg-blue-50 text-blue-600' :
+                          sol.source === 'grants' ? 'bg-green-50 text-green-700' :
+                          sol.source === 'sam'    ? 'bg-purple-50 text-purple-700' :
+                          'bg-gray-100 text-gray-500'
+                        }`}>
+                          {sol.source}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       {sol.top_alignment_score !== null && sol.top_alignment_score !== undefined ? (
                         <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium ${SCORE_BADGE(sol.top_alignment_score)}`}>

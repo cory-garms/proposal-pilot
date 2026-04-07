@@ -57,6 +57,15 @@ export const createProfile = (body) =>
 export const getCapabilities = (profileId) =>
   api.get('/capabilities', { params: { profile_id: profileId } }).then(r => r.data)
 
+export const createCapability = (body) =>
+  api.post('/capabilities', body).then(r => r.data)
+
+export const updateCapability = (id, body) =>
+  api.patch(`/capabilities/${id}`, body).then(r => r.data)
+
+export const deleteCapability = (id) =>
+  api.delete(`/capabilities/${id}`).then(r => r.data)
+
 export const createProject = (body) =>
   api.post('/projects', body).then(r => r.data)
 
@@ -74,6 +83,30 @@ export const updateDraft = (projectId, draftId, content) =>
 
 export const getDraftDiff = (projectId, draftId, againstId) =>
   api.get(`/projects/${projectId}/drafts/${draftId}/diff`, { params: { against: againstId } }).then(r => r.data)
+
+export const triggerSamCsvImport = (params = {}) =>
+  api.post('/solicitations/import/sam-csv', params).then(r => r.data)
+
+export const getSamCsvImportStatus = () =>
+  api.get('/solicitations/import/sam-csv/status').then(r => r.data)
+
+export const triggerGrantsScrape = (params = {}) =>
+  api.post('/solicitations/scrape/grants', params).then(r => r.data)
+
+export const getGrantsScrapeStatus = () =>
+  api.get('/solicitations/scrape/grants/status').then(r => r.data)
+
+export const triggerSamScrape = (params = {}) =>
+  api.post('/solicitations/scrape/sam', params).then(r => r.data)
+
+export const getSamScrapeStatus = () =>
+  api.get('/solicitations/scrape/sam/status').then(r => r.data)
+
+export const runAlignment = (params = {}) =>
+  api.post('/align/run', null, { params: { skip_scored: true, ...params } }).then(r => r.data)
+
+export const getAlignStatus = () =>
+  api.get('/align/status').then(r => r.data)
 
 export const getKeywords = (activeOnly = false) =>
   api.get('/keywords', { params: { active_only: activeOnly } }).then(r => r.data)

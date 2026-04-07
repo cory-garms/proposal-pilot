@@ -23,11 +23,16 @@ class GrantsScrapeRequest(BaseModel):
 class SamScrapeRequest(BaseModel):
     max_results: int = 200
 
+class SamCsvRequest(BaseModel):
+    filename: str = "SAM_ContractOpportunitiesFull.csv"
+    max_results: int = 500
+
 
 # Shared scrape state so the UI can poll if needed
 _scrape_status: dict = {"running": False, "last_count": 0, "last_error": None}
 _grants_status: dict = {"running": False, "last_stats": None, "last_error": None}
 _sam_status: dict = {"running": False, "last_stats": None, "last_error": None}
+_sam_csv_status: dict = {"running": False, "last_stats": None, "last_error": None}
 
 
 @router.get("")
@@ -41,6 +46,7 @@ def list_solicitations(
     status_filter: Optional[str] = Query(None),
     profile_id: Optional[str] = Query("1"),
     watched_only: bool = Query(False),
+    source: Optional[str] = Query(None),
 ):
     return get_all_solicitations(
         limit=limit,
@@ -52,6 +58,7 @@ def list_solicitations(
         status_filter=status_filter,
         profile_id=profile_id,
         watched_only=watched_only,
+        source=source,
     )
 
 
@@ -139,11 +146,50 @@ async def _run_sam_scrape(max_results: int) -> None:
     _sam_status["last_error"] = None
     try:
         stats = run_sam_scrape(max_results=max_results)
-        _sam_status["last_stats"] = stats
+        if "error" in stats:
+            _sam_status["last_error"] = stats["error"]
+        else:
+            _sam_status["last_stats"] = stats
     except Exception as e:
         _sam_status["last_error"] = str(e)
     finally:
         _sam_status["running"] = False
+
+
+@router.post("/import/sam-csv")
+def trigger_sam_csv_import(req: SamCsvRequest, background_tasks: BackgroundTasks):
+    if _sam_csv_status["running"]:
+        raise HTTPException(status_code=409, detail="SAM CSV import already in progress")
+    # Only allow plain filenames — no path traversal
+    if "/" in req.filename or "\\" in req.filename:
+        raise HTTPException(status_code=422, detail="filename must not contain path separators")
+    background_tasks.add_task(_run_sam_csv_import, req.filename, req.max_results)
+    return {"message": "SAM CSV import started", "filename": req.filename, "max_results": req.max_results}
+
+
+@router.get("/import/sam-csv/status")
+def sam_csv_import_status():
+    return _sam_csv_status
+
+
+async def _run_sam_csv_import(filename: str, max_results: int) -> None:
+    import os
+    from backend.scraper.sam_csv_parser import run_sam_csv_import
+    _sam_csv_status["running"] = True
+    _sam_csv_status["last_error"] = None
+    try:
+        # Resolve relative to project root (parent of backend/)
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        csv_path = os.path.join(project_root, filename)
+        stats = run_sam_csv_import(csv_path, max_results=max_results)
+        if "error" in stats:
+            _sam_csv_status["last_error"] = stats["error"]
+        else:
+            _sam_csv_status["last_stats"] = stats
+    except Exception as e:
+        _sam_csv_status["last_error"] = str(e)
+    finally:
+        _sam_csv_status["running"] = False
 
 
 async def _run_grants_scrape(max_results: int) -> None:

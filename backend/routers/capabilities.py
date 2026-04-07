@@ -1,13 +1,14 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from pydantic import BaseModel
 
 from backend.db.crud import (
-    get_all_capabilities, insert_capability,
+    get_all_capabilities, insert_capability, update_capability, delete_capability,
     get_scores_for_solicitation, get_solicitation_by_id,
     get_all_profiles, insert_profile,
     get_all_keywords, upsert_keyword, set_keyword_active, delete_keyword,
 )
 from backend.capabilities.aligner import run_alignment
+from backend.routers.auth import get_current_user, require_user
 
 import json
 
@@ -21,15 +22,17 @@ _align_status: dict = {"running": False, "last_stats": None, "last_error": None}
 # ---------------------------------------------------------------------------
 
 @router.get("/profiles")
-def list_profiles():
-    return get_all_profiles()
+def list_profiles(user: dict | None = Depends(get_current_user)):
+    # When authenticated, return only the user's profiles; otherwise return all
+    user_id = user["id"] if user else None
+    return get_all_profiles(user_id=user_id)
 
 class ProfileCreate(BaseModel):
     name: str
 
 @router.post("/profiles", status_code=201)
-def create_profile(body: ProfileCreate):
-    pid = insert_profile(body.name)
+def create_profile(body: ProfileCreate, user: dict = Depends(require_user)):
+    pid = insert_profile(body.name, user_id=user["id"])
     return {"message": f"Profile '{body.name}' created", "id": pid}
 
 # ---------------------------------------------------------------------------
@@ -53,9 +56,39 @@ class CapabilityCreate(BaseModel):
 
 
 @router.post("/capabilities", status_code=201)
-def create_capability(body: CapabilityCreate):
+def create_capability(body: CapabilityCreate, _: dict = Depends(require_user)):
     insert_capability(body.name, body.description, json.dumps(body.keywords), body.profile_id)
+    # Seed keywords into search_keywords table so scraper picks them up
+    for kw in body.keywords:
+        if kw.strip():
+            upsert_keyword(kw.strip().lower(), source="capability")
     return {"message": f"Capability '{body.name}' created"}
+
+
+class CapabilityUpdate(BaseModel):
+    name: str
+    description: str
+    keywords: list[str] = []
+
+
+@router.patch("/capabilities/{capability_id}")
+def edit_capability(capability_id: int, body: CapabilityUpdate, _: dict = Depends(require_user)):
+    caps = get_all_capabilities()
+    if not any(c["id"] == capability_id for c in caps):
+        raise HTTPException(status_code=404, detail="Capability not found")
+    update_capability(capability_id, body.name, body.description, json.dumps(body.keywords))
+    for kw in body.keywords:
+        if kw.strip():
+            upsert_keyword(kw.strip().lower(), source="capability")
+    return {"message": f"Capability '{body.name}' updated"}
+
+
+@router.delete("/capabilities/{capability_id}", status_code=204)
+def remove_capability(capability_id: int, _: dict = Depends(require_user)):
+    caps = get_all_capabilities()
+    if not any(c["id"] == capability_id for c in caps):
+        raise HTTPException(status_code=404, detail="Capability not found")
+    delete_capability(capability_id)
 
 
 # ---------------------------------------------------------------------------
@@ -68,18 +101,18 @@ def align_status():
 
 
 @router.post("/align/run")
-def trigger_alignment(background_tasks: BackgroundTasks, force_api: bool = False, include_expired: bool = False):
+def trigger_alignment(background_tasks: BackgroundTasks, force_api: bool = False, include_expired: bool = False, profile_id: int | None = None, skip_scored: bool = True):
     if _align_status["running"]:
         raise HTTPException(status_code=409, detail="Alignment already in progress")
-    background_tasks.add_task(_run_alignment_task, force_api, include_expired)
-    return {"message": "Alignment started", "force_api": force_api, "include_expired": include_expired}
+    background_tasks.add_task(_run_alignment_task, force_api, include_expired, profile_id, skip_scored)
+    return {"message": "Alignment started", "force_api": force_api, "include_expired": include_expired, "profile_id": profile_id, "skip_scored": skip_scored}
 
 
-async def _run_alignment_task(force_api: bool, include_expired: bool = False) -> None:
+async def _run_alignment_task(force_api: bool, include_expired: bool = False, profile_id: int | None = None, skip_scored: bool = True) -> None:
     _align_status["running"] = True
     _align_status["last_error"] = None
     try:
-        stats = run_alignment(force_api=force_api, include_expired=include_expired)
+        stats = run_alignment(force_api=force_api, include_expired=include_expired, profile_id=profile_id, skip_scored=skip_scored)
         _align_status["last_stats"] = stats
     except Exception as e:
         _align_status["last_error"] = str(e)

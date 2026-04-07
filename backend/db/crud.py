@@ -10,8 +10,8 @@ from backend.database import get_connection
 def upsert_solicitation(data: dict) -> int:
     """Insert or update a solicitation by URL. Returns the row id."""
     sql = """
-        INSERT INTO solicitations (agency, title, topic_number, description, deadline, open_date, close_date, release_date, vehicle_type, branch, tpoc_json, url, raw_html)
-        VALUES (:agency, :title, :topic_number, :description, :deadline, :open_date, :close_date, :release_date, :vehicle_type, :branch, :tpoc_json, :url, :raw_html)
+        INSERT INTO solicitations (agency, title, topic_number, description, deadline, open_date, close_date, release_date, vehicle_type, branch, tpoc_json, url, raw_html, source)
+        VALUES (:agency, :title, :topic_number, :description, :deadline, :open_date, :close_date, :release_date, :vehicle_type, :branch, :tpoc_json, :url, :raw_html, :source)
         ON CONFLICT(url) DO UPDATE SET
             agency       = excluded.agency,
             title        = excluded.title,
@@ -25,6 +25,7 @@ def upsert_solicitation(data: dict) -> int:
             branch       = excluded.branch,
             tpoc_json    = excluded.tpoc_json,
             raw_html     = excluded.raw_html,
+            source       = excluded.source,
             scraped_at   = datetime('now')
     """
     with get_connection() as conn:
@@ -42,6 +43,7 @@ def get_all_solicitations(
     status_filter: Optional[str] = None,
     profile_id: Optional[str] = "1",
     watched_only: bool = False,
+    source: Optional[str] = None,
 ) -> list[dict]:
     sql = """
         SELECT s.*, 
@@ -54,6 +56,10 @@ def get_all_solicitations(
 
     if watched_only:
         sql += " AND s.watched = 1"
+
+    if source:
+        sql += " AND s.source = ?"
+        params.append(source)
 
     if agency:
         sql += " AND s.agency = ?"
@@ -104,14 +110,23 @@ def set_solicitation_watched(solicitation_id: int, watched: bool) -> None:
 # Profiles
 # ---------------------------------------------------------------------------
 
-def get_all_profiles() -> list[dict]:
+def get_all_profiles(user_id: Optional[int] = None) -> list[dict]:
+    sql = "SELECT * FROM profiles"
+    params = []
+    if user_id is not None:
+        sql += " WHERE user_id = ?"
+        params.append(user_id)
+    sql += " ORDER BY name"
     with get_connection() as conn:
-        rows = conn.execute("SELECT * FROM profiles ORDER BY name").fetchall()
+        rows = conn.execute(sql, params).fetchall()
     return [dict(r) for r in rows]
 
-def insert_profile(name: str) -> int:
+def insert_profile(name: str, user_id: Optional[int] = None) -> int:
     with get_connection() as conn:
-        cur = conn.execute("INSERT OR IGNORE INTO profiles (name) VALUES (?)", (name,))
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO profiles (name, user_id) VALUES (?, ?)",
+            (name, user_id),
+        )
         return cur.lastrowid
 
 # ---------------------------------------------------------------------------
@@ -130,6 +145,19 @@ def get_all_capabilities(profile_id: Optional[int] = None) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def update_capability(capability_id: int, name: str, description: str, keywords_json: str) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE capabilities SET name = ?, description = ?, keywords_json = ? WHERE id = ?",
+            (name, description, keywords_json, capability_id),
+        )
+
+
+def delete_capability(capability_id: int) -> None:
+    with get_connection() as conn:
+        conn.execute("DELETE FROM capabilities WHERE id = ?", (capability_id,))
+
+
 def insert_capability(name: str, description: str, keywords_json: str, profile_id: int = 1) -> int:
     with get_connection() as conn:
         cur = conn.execute(
@@ -142,6 +170,15 @@ def insert_capability(name: str, description: str, keywords_json: str, profile_i
 # ---------------------------------------------------------------------------
 # Scores
 # ---------------------------------------------------------------------------
+
+def get_scored_pairs() -> set[tuple[int, int]]:
+    """Return set of (solicitation_id, capability_id) pairs that already have a non-zero score."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT solicitation_id, capability_id FROM solicitation_capability_scores WHERE score > 0"
+        ).fetchall()
+    return {(r["solicitation_id"], r["capability_id"]) for r in rows}
+
 
 def upsert_score(solicitation_id: int, capability_id: int, score: float, rationale: str) -> None:
     sql = """

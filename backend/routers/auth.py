@@ -107,6 +107,10 @@ def register(body: RegisterRequest):
         raise HTTPException(status_code=409, detail="email already registered")
     hashed = _pwd.hash(body.password)
     user_id = _create_user(email, hashed)
+    # Claim any un-owned profiles (runs once for the first registered user)
+    with get_connection() as conn:
+        conn.execute("UPDATE profiles SET user_id = ? WHERE user_id IS NULL", (user_id,))
+        conn.commit()
     return {"access_token": _make_token(user_id)}
 
 

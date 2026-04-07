@@ -18,10 +18,11 @@ from backend.db.crud import (
     get_all_capabilities,
     upsert_score,
     get_scores_for_solicitation,
+    get_scored_pairs,
 )
 from backend.capabilities.prompts import ALIGNMENT_SYSTEM, ALIGNMENT_USER
 
-KEYWORD_THRESHOLD = 0.15  # min keyword score to trigger Claude API call
+KEYWORD_THRESHOLD = 0.05  # min keyword score to trigger Claude API call (~2 keyword hits)
 MODEL = "claude-sonnet-4-6"
 MAX_DESC_CHARS = 3000       # truncate long descriptions to control token cost
 
@@ -116,14 +117,22 @@ def score_solicitation(
     return results
 
 
-def run_alignment(solicitation_ids: list[int] | None = None, force_api: bool = False, include_expired: bool = False) -> dict:
+def run_alignment(
+    solicitation_ids: list[int] | None = None,
+    force_api: bool = False,
+    include_expired: bool = False,
+    profile_id: int | None = None,
+    skip_scored: bool = True,
+) -> dict:
     """
     Run alignment for all (or specified) solicitations against all capabilities.
-    Set include_expired=True to score historical/closed solicitations as well.
-    Returns stats dict.
+
+    skip_scored (default True): skip any (solicitation, capability) pair that already
+    has a non-zero Claude score. New solicitations and new capabilities are always scored.
+    Overridden by force_api=True, which rescores everything unconditionally.
     """
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    capabilities = get_all_capabilities()
+    capabilities = get_all_capabilities(profile_id=profile_id)
     if not capabilities:
         return {"error": "No capabilities seeded. Run seed_capabilities.py first."}
 
@@ -131,27 +140,40 @@ def run_alignment(solicitation_ids: list[int] | None = None, force_api: bool = F
     if solicitation_ids:
         solicitations = [s for s in solicitations if s["id"] in solicitation_ids]
 
+    # Load existing scored pairs once — O(1) lookup during the loop
+    already_scored: set[tuple[int, int]] = set()
+    if skip_scored and not force_api:
+        already_scored = get_scored_pairs()
+        print(f"[aligner] {len(already_scored)} pairs already scored — will skip")
+
     total = len(solicitations)
-    api_calls = 0
-    errors = 0
+    api_calls = skipped = errors = 0
 
     print(f"[aligner] Scoring {total} solicitations x {len(capabilities)} capabilities...")
 
     for i, sol in enumerate(solicitations):
+        # Filter capabilities to only unscored pairs for this solicitation
+        caps_to_score = [
+            c for c in capabilities
+            if force_api or (sol["id"], c["id"]) not in already_scored
+        ]
+        if not caps_to_score:
+            skipped += 1
+            continue
         try:
-            results = score_solicitation(client, sol, capabilities, force_api=force_api)
+            results = score_solicitation(client, sol, caps_to_score, force_api=force_api)
             api_calls += sum(1 for r in results if r["api_used"])
         except Exception as e:
             print(f"[aligner] Error on solicitation {sol['id']}: {e}")
             errors += 1
 
         if (i + 1) % 10 == 0 or (i + 1) == total:
-            print(f"[aligner] Progress: {i + 1}/{total} (API calls so far: {api_calls})")
+            print(f"[aligner] Progress: {i + 1}/{total} (API calls: {api_calls}, skipped: {skipped})")
 
     return {
-        "solicitations_scored": total,
+        "solicitations_scored": total - skipped,
+        "solicitations_skipped": skipped,
         "capabilities": len(capabilities),
-        "total_scores": total * len(capabilities),
         "api_calls_made": api_calls,
         "errors": errors,
     }

@@ -23,8 +23,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const profileId = localStorage.getItem('profileId') || '1'
-    getDashboard(profileId)
+    getDashboard()
       .then(setData)
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -32,9 +31,30 @@ export default function Dashboard() {
 
   if (loading) return <div className="p-8 text-center text-gray-400">Loading Dashboard...</div>
 
+  const ScoreRow = ({ label, scores }) => {
+    const visible = (scores || []).filter(s => s.score > 0)
+    if (!visible.length) return null
+    return (
+      <div className="flex flex-wrap items-start gap-1">
+        <span className="text-xs text-gray-400 w-8 shrink-0 pt-0.5">{label}</span>
+        <div className="flex flex-wrap gap-1">
+          {visible.map((s, i) => (
+            <span
+              key={i}
+              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${SCORE_BADGE_CLS(s.score)}`}
+            >
+              <span className="font-mono">{s.score.toFixed(2)}</span>
+              <span>{s.capability}</span>
+            </span>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   const SolCard = ({ item }) => {
     const ringCls = SCORE_RING[item.score_color] || SCORE_RING.gray
-    const topScores = (item.top_scores || []).filter(s => s.score > 0)
+    const hasScores = (item.cory_scores?.length > 0) || (item.ssi_scores?.length > 0)
 
     return (
       <div
@@ -52,17 +72,10 @@ export default function Dashboard() {
           {item.title}
         </h3>
 
-        {topScores.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-3">
-            {topScores.map((s, i) => (
-              <span
-                key={i}
-                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${SCORE_BADGE_CLS(s.score)}`}
-              >
-                <span className="font-mono">{s.score.toFixed(2)}</span>
-                <span>{s.capability}</span>
-              </span>
-            ))}
+        {hasScores && (
+          <div className="flex flex-col gap-1.5 mb-3">
+            <ScoreRow label="Cory" scores={item.cory_scores} />
+            <ScoreRow label="SSI" scores={item.ssi_scores} />
           </div>
         )}
 

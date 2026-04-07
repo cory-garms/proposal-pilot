@@ -1,9 +1,14 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
 from backend.db.crud import get_all_solicitations
 from backend.database import get_connection
 from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+PROFILE_CORY = 1
+PROFILE_SSI = 2
+MIN_SCORE = 0.40       # only show solicitations where at least one profile scores >= this
+MAX_PER_SECTION = 12   # cap cards per dashboard section
 
 
 def get_agency_schedules():
@@ -12,19 +17,27 @@ def get_agency_schedules():
     return [dict(r) for r in rows]
 
 
-def _top_scores(solicitation_id: int, profile_id: str, n: int = 3) -> list[dict]:
-    """Return the top-n capability scores for a solicitation under a given profile."""
+def _bulk_top_scores(profile_id: int, n: int = 3) -> dict:
+    """Return {solicitation_id: [top-n score dicts]} for all solicitations, one profile."""
     sql = """
-        SELECT sc.score, c.name AS capability
+        SELECT sc.solicitation_id, sc.score, c.name AS capability
         FROM solicitation_capability_scores sc
         JOIN capabilities c ON c.id = sc.capability_id
-        WHERE sc.solicitation_id = ? AND c.profile_id = ?
-        ORDER BY sc.score DESC
-        LIMIT ?
+        WHERE c.profile_id = ?
+        ORDER BY sc.solicitation_id, sc.score DESC
     """
     with get_connection() as conn:
-        rows = conn.execute(sql, (solicitation_id, profile_id, n)).fetchall()
-    return [dict(r) for r in rows]
+        rows = conn.execute(sql, (profile_id,)).fetchall()
+
+    result: dict = {}
+    for row in rows:
+        r = dict(row)
+        sid = r["solicitation_id"]
+        if sid not in result:
+            result[sid] = []
+        if len(result[sid]) < n:
+            result[sid].append({"score": r["score"], "capability": r["capability"]})
+    return result
 
 
 def _score_color(score: float | None) -> str:
@@ -38,12 +51,16 @@ def _score_color(score: float | None) -> str:
 
 
 @router.get("")
-def get_dashboard_summary(profile_id: str = Query("1")):
+def get_dashboard_summary():
     solicitations = get_all_solicitations(
         limit=1000,
         exclude_expired=False,
-        profile_id=profile_id,
+        profile_id=str(PROFILE_CORY),
     )
+
+    # Two bulk queries instead of 2×N per-row queries
+    cory_map = _bulk_top_scores(PROFILE_CORY)
+    ssi_map = _bulk_top_scores(PROFILE_SSI)
 
     today = datetime.now()
     two_weeks_ago = (today - timedelta(days=14)).strftime("%Y-%m-%d")
@@ -65,6 +82,21 @@ def get_dashboard_summary(profile_id: str = Query("1")):
         if c_date and c_date < sixty_days_ago:
             continue
 
+        cory_scores = cory_map.get(sol["id"], [])
+        ssi_scores = ssi_map.get(sol["id"], [])
+        cory_best = max((s["score"] for s in cory_scores), default=0)
+        ssi_best = max((s["score"] for s in ssi_scores), default=0)
+        best = max(cory_best, ssi_best)
+
+        if best < MIN_SCORE:
+            continue
+
+        sol["cory_scores"] = [s for s in cory_scores if s["score"] > 0]
+        sol["ssi_scores"] = [s for s in ssi_scores if s["score"] > 0]
+        sol["cory_top"] = cory_best
+        sol["ssi_top"] = ssi_best
+        sol["score_color"] = _score_color(best)
+
         is_closed = bool(c_date and c_date < today_str)
         is_open = not is_closed and (not o_date or o_date <= today_str)
         in_tpoc = bool(
@@ -72,11 +104,6 @@ def get_dashboard_summary(profile_id: str = Query("1")):
             and r_date and r_date <= today_str
             and o_date and o_date > today_str
         )
-
-        # Attach top-3 scores and color signal
-        top = _top_scores(sol["id"], profile_id, n=3)
-        sol["top_scores"] = top
-        sol["score_color"] = _score_color(sol.get("top_alignment_score"))
 
         if is_closed and c_date >= sixty_days_ago:
             recently_closed.append(sol)
@@ -91,9 +118,9 @@ def get_dashboard_summary(profile_id: str = Query("1")):
             if c_date and c_date <= thirty_days_from_now:
                 closing_soon.append(sol)
 
-    # Sort every section by alignment score descending (unscored to bottom)
     def by_score(lst):
-        return sorted(lst, key=lambda s: s.get("top_alignment_score") or 0, reverse=True)
+        scored = sorted(lst, key=lambda s: max(s.get("cory_top", 0), s.get("ssi_top", 0)), reverse=True)
+        return scored[:MAX_PER_SECTION]
 
     schedules = get_agency_schedules()
 

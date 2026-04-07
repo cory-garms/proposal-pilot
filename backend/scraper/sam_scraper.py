@@ -16,6 +16,7 @@ Usage (standalone):
 import json
 import re
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime
@@ -100,32 +101,71 @@ def _build_search_queries(keywords: list[str]) -> list[str]:
     return CLUSTERS + uncovered[:20]
 
 
-def _search(query: str, ptype: str, limit: int = 25, api_key: str = "") -> list[dict]:
-    params: dict = {
-        "keywords": query,
-        "ptype": ptype,
-        "active": "Yes",
-        "limit": limit,
-        "offset": 0,
-    }
-    if api_key:
-        params["api_key"] = api_key
-    url = f"{SAM_SEARCH_URL}?{urllib.parse.urlencode(params)}"
-    try:
-        req = urllib.request.Request(url, headers={"Accept": "application/json"})
-        with urllib.request.urlopen(req, timeout=20) as r:
-            data = json.loads(r.read())
-        return data.get("opportunitiesData", []) or []
-    except Exception as e:
-        print(f"  [SAM search error] '{query}' ptype={ptype}: {e}")
-        return []
+def _date_windows() -> list[tuple[str, str]]:
+    """
+    SAM.gov requires date ranges within a single calendar year.
+    Return windows for the current year and the previous year so we capture
+    solicitations posted last year that are still open.
+    """
+    today = datetime.utcnow()
+    cur_year = today.year
+    prev_year = cur_year - 1
+    return [
+        (f"01/01/{cur_year}", today.strftime("%m/%d/%Y")),
+        (f"01/01/{prev_year}", f"12/31/{prev_year}"),
+    ]
+
+
+def _search(query: str, ptype: str, limit: int = 25, api_key: str = "", delay: float = 0.7) -> list[dict]:
+    results: list[dict] = []
+    seen_ids: set[str] = set()
+    windows = _date_windows()
+    for i, (posted_from, posted_to) in enumerate(windows):
+        if i > 0:
+            time.sleep(delay)
+        params: dict = {
+            "keyword": query,
+            "ptype": ptype,
+            "postedFrom": posted_from,
+            "postedTo": posted_to,
+            "limit": limit,
+            "offset": 0,
+            "api_key": api_key,
+        }
+        url = f"{SAM_SEARCH_URL}?{urllib.parse.urlencode(params)}"
+        for attempt in range(3):
+            try:
+                req = urllib.request.Request(url, headers={"Accept": "application/json"})
+                with urllib.request.urlopen(req, timeout=20) as r:
+                    data = json.loads(r.read())
+                for opp in data.get("opportunitiesData", []) or []:
+                    nid = opp.get("noticeId")
+                    if nid and nid not in seen_ids:
+                        seen_ids.add(nid)
+                        results.append(opp)
+                break  # success
+            except urllib.error.HTTPError as e:
+                if e.code == 429:
+                    wait = 65 * (attempt + 1)
+                    print(f"  [SAM 429] rate limited — waiting {wait}s before retry {attempt + 1}/3")
+                    time.sleep(wait)
+                else:
+                    print(f"  [SAM search error] '{query}' ptype={ptype} ({posted_from}–{posted_to}): {e}")
+                    break
+            except Exception as e:
+                print(f"  [SAM search error] '{query}' ptype={ptype} ({posted_from}–{posted_to}): {e}")
+                break
+    return results
 
 
 def run_sam_scrape(max_results: int = 200) -> dict:
     from backend.db.crud import get_all_keywords, upsert_solicitation
 
     api_key = _get_api_key()
-    delay = _KEY_DELAY if api_key else _DEFAULT_DELAY
+    if not api_key:
+        return {"error": "SAM_API_KEY is required. Register free at https://sam.gov/profile/details"}
+
+    delay = _KEY_DELAY
 
     keywords = [k["keyword"] for k in get_all_keywords(active_only=True)]
     queries = _build_search_queries(keywords)
@@ -134,8 +174,6 @@ def run_sam_scrape(max_results: int = 200) -> dict:
     records: list[dict] = []
 
     print(f"SAM.gov scrape: {len(queries)} queries, max_results={max_results}, delay={delay}s")
-    if not api_key:
-        print("  (no SAM_API_KEY — key-free tier, 10 req/min)")
 
     for query in queries:
         if len(records) >= max_results:
@@ -143,7 +181,7 @@ def run_sam_scrape(max_results: int = 200) -> dict:
         for ptype in ("k", "p"):
             if len(records) >= max_results:
                 break
-            results = _search(query, ptype, limit=25, api_key=api_key)
+            results = _search(query, ptype, limit=25, api_key=api_key, delay=delay)
             new = [r for r in results if r.get("noticeId") not in seen_ids]
             seen_ids.update(r["noticeId"] for r in new if r.get("noticeId"))
             records.extend(new)
@@ -163,7 +201,21 @@ def run_sam_scrape(max_results: int = 200) -> dict:
         sol_number = opp.get("solicitationNumber") or opp.get("noticeId", "")
         url = f"{SAM_BASE_URL}/{notice_id}/view" if notice_id else None
 
-        description = _strip_html(opp.get("description") or opp.get("title") or "")[:8000]
+        description = _strip_html(opp.get("description") or "")[:8000]
+        # If description is too short, pad with available structured fields
+        if len(description) < 200:
+            naics = opp.get("naicsCode") or ""
+            set_aside = opp.get("typeOfSetAside") or ""
+            department = opp.get("departmentName") or ""
+            subtier = opp.get("subtierName") or ""
+            extra = " ".join(filter(None, [
+                f"Department: {department}" if department else "",
+                f"Office: {subtier}" if subtier else "",
+                f"NAICS: {naics}" if naics else "",
+                f"Set-aside: {set_aside}" if set_aside else "",
+                f"Solicitation: {sol_number}" if sol_number else "",
+            ]))
+            description = f"{title}. {extra} {description}".strip()[:8000]
         close_raw = opp.get("responseDeadLine") or opp.get("archiveDate")
         open_raw = opp.get("postedDate")
 
@@ -189,6 +241,7 @@ def run_sam_scrape(max_results: int = 200) -> dict:
             "tpoc_json": _extract_tpoc(opp),
             "url": url,
             "raw_html": None,
+            "source": "sam",
         }
 
         try:
