@@ -1,4 +1,5 @@
 import sys
+import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -43,16 +44,18 @@ def _validate_config() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _validate_config()
+    print("[startup] initializing database...", file=sys.stderr)
     try:
-        init_db()
+        await asyncio.to_thread(init_db)
     except Exception as e:
         print(f"[startup] FATAL: init_db failed: {e}", file=sys.stderr)
         raise
+    print("[startup] database ready", file=sys.stderr)
     try:
         start_scheduler()
     except Exception as e:
         print(f"[startup] WARNING: scheduler failed to start: {e}", file=sys.stderr)
-        # Don't crash the app over the scheduler
+    print("[startup] complete", file=sys.stderr)
     yield
     stop_scheduler()
 
