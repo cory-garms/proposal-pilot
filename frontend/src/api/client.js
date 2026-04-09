@@ -16,9 +16,10 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401 && window.location.pathname !== '/login') {
+    const loginPath = import.meta.env.BASE_URL + 'login'
+    if (err.response?.status === 401 && window.location.pathname !== loginPath) {
       sessionStorage.removeItem('token')
-      window.location.href = '/login'
+      window.location.href = loginPath
     }
     return Promise.reject(err)
   }

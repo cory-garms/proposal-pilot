@@ -85,7 +85,7 @@ export default function NavBar() {
           onClick={() => {
             sessionStorage.removeItem('token')
             sessionStorage.removeItem('is_admin')
-            window.location.href = '/login'
+            window.location.href = import.meta.env.BASE_URL + 'login'
           }}
           className="text-blue-300 hover:text-white text-xs transition-colors"
         >
