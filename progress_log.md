@@ -352,3 +352,47 @@
 | users | 4 (cgarms admin + 3 betas) |
 | active keywords | 776 |
 
+---
+
+## 2026-04-09 - Sprint 9: Production Deploy (Claude)
+
+### Completed
+
+**Infrastructure fixes**
+- Pinned Python to 3.12 via `.python-version` — Render was defaulting to 3.14, where `greenlet` (APScheduler dep) has no prebuilt wheel and fails to compile
+- Fixed `$PORT` expansion: wrapped startCommand in `sh -c "uvicorn ... --port ${PORT:-10000}"` — Render's blueprint runner does not shell-expand bare `$PORT`
+- Fixed lifespan blocking: moved `init_db()` into `asyncio.to_thread()` so uvicorn can serve `/health` while the DB initializes; added startup log lines
+- Removed `playwright` from requirements (unused, was pulling ~300MB of chromium driver)
+- Pinned `anthropic>=0.25.0,<0.28.0` to drop 13 transitive packages (HuggingFace tokenizers + CLI tools added in 0.28+); our `messages.create()` usage is API-stable since 0.17
+
+**Frontend deploy**
+- Fixed `npm ci` failure: GitHub Actions runner uses Node 20, local is Node 24 — native binary lock file entries diverged. Changed workflow to Node 24 + `npm install`
+- Fixed React Router: `BrowserRouter` was missing `basename`; set to `import.meta.env.BASE_URL` (Vite's built-in, already set from `VITE_BASE_PATH`)
+- Fixed all `window.location.href = '/login'` hardcodes: NavBar logout and `client.js` 401 interceptor now use `import.meta.env.BASE_URL + 'login'`
+
+**URL corrections**
+- All `cgarms.github.io` references updated to `cory-garms.github.io` (actual GitHub account username)
+
+**DB upload**
+- WAL checkpointed locally (`PRAGMA wal_checkpoint(FULL)`)
+- Uploaded `proposalpilot.db` (8.5 MB) to Render persistent disk via SCP
+- SSH key: `~/.ssh/id_rsa_personal` registered in Render Account Settings
+- Render SSH target: `srv-d7buv6fkijhs73b1mkfg@ssh.oregon.render.com`
+
+### Live URLs
+| Service | URL |
+|---------|-----|
+| Frontend | `https://cory-garms.github.io/proposal-pilot/` |
+| Backend | Render `proposalpilot-api`, Oregon, Starter plan |
+| Repo | `https://github.com/cory-garms/proposal-pilot` |
+
+### DB State at Sprint End (production = local upload)
+| Table | Count |
+|-------|-------|
+| solicitations | 824 |
+| scored pairs | 324 |
+| capabilities | 39 |
+| profiles | 5 |
+| users | 4 |
+| active keywords | 776 |
+

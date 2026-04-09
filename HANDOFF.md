@@ -1,46 +1,64 @@
 # HANDOFF
 
-**Last updated:** 2026-04-09 (Sprint 9 deploy — Claude)
+**Last updated:** 2026-04-09 (Sprint 9 complete — Claude)
 
 ---
 
 ## Immediate Next Steps (Start Here)
 
-Sprint 9: deploy live. GitHub Pages URL is `https://cory-garms.github.io/proposal-pilot/`.
-`render.yaml` and all CORS references have been updated to `https://cory-garms.github.io`.
+**Sprint 9 is complete. The app is live.**
 
-### Step 1 — GitHub Pages setup
-1. Repo Settings → Pages → Source: **GitHub Actions**
-2. Repo Settings → **Secrets** → New: `VITE_API_BASE_URL` = `https://proposalpilot-api.onrender.com` (confirm exact service name in Render after blueprint deploys)
-3. Repo Settings → **Variables** → New: `VITE_BASE_PATH` = `/proposal-pilot/`
-4. Push to `main` (already done) — workflow fires automatically, deploys to `https://cory-garms.github.io/proposal-pilot/`
+- Frontend: `https://cory-garms.github.io/proposal-pilot/`
+- Backend: Render `proposalpilot-api` (Oregon, Starter plan)
+- DB: uploaded from local (824 solicitations, 5 profiles, 4 users)
+- Beta user credentials in DB: `Welcome!2026` temp password for rpanfili, dstelter, rtaylor
 
-### Step 2 — Render backend setup
-1. Render dashboard → **New → Blueprint** → connect `cory-garms/proposal-pilot` repo → reads `render.yaml` automatically
-2. Set your LLM API key in Render dashboard → Environment → `ANTHROPIC_API_KEY`
-3. After first deploy, confirm the service URL and update `VITE_API_BASE_URL` secret in GitHub if it differs
+**Sprint 10 goal: beta tester handoff by end of day 5.**
 
-### Step 3 — Upload the database (CONFIRMED: use existing local DB)
-The Render disk starts empty. Upload `proposalpilot.db` from your local machine:
+### Sprint 10 Plan
+
+**Day 1 — Smoke test the live app**
+- Login as cgarms, verify dashboard, solicitation list, capabilities, alignment
+- Login as each beta persona (use incognito) — confirm they see only their own profile + Spectral Sciences shared profile
+- Verify score button works, generate a draft end-to-end, export PDF/DOCX
+- Check Render logs for any errors during normal use
+
+**Day 2 — Fix bugs found in smoke test**
+- Triage anything broken; fix before inviting beta users
+
+**Day 3 — Scrape fresh solicitations on Render**
+- Trigger SAM scrape from Admin page (live Render backend, real API)
+- Run alignment for Spectral Sciences shared profile
+- Verify nightly scheduler is showing a next-run time in Admin
+
+**Day 4 — Beta onboarding prep**
+- Write the beta invite email (URL, temp password, 3-step quick-start)
+- Consider a one-page `BETA_GUIDE.md` or in-app tooltip if onboarding looks rough
+
+**Day 5 — Send invites, monitor**
+- Email rpanfili@spectral.com, dstelter@spectral.com, rtaylor@spectral.com
+- Monitor Render logs for 401s, errors, slow queries
+- Be available to reset passwords if needed (`python -m backend.scraper.reset_beta_users` locally then re-upload, or use Render Shell to run it directly)
+
+### Known Issues to Address in Sprint 10
+- **Capability auto-score on edit** — `PATCH /capabilities/{id}` triggers background alignment but not verified end-to-end on production
+- **SAM CSV import** — `POST /solicitations/import/sam-csv` exists but untested; don't expose in beta
+- **Password reset flow** — no self-service; admin must use `reset_beta_users.py` or Render Shell
+
+### Render Operations Reference
 ```bash
-# Option A: Render CLI (install: npm i -g @render/cli or brew install render)
-render ssh proposalpilot-api
-# In a separate terminal:
-scp proposalpilot.db <paste-ssh-target-from-render-cli-output>:/data/proposalpilot.db
+# SSH into Render (add your public key in Render Account Settings → SSH Keys first)
+ssh srv-d7buv6fkijhs73b1mkfg@ssh.oregon.render.com
 
-# Option B: Render dashboard → Shell tab
-# First, get the SSH address from Render dashboard → Service → Shell → "SSH" button
-# Then from local WSL terminal:
-scp /home/cgarms/Sandbox/proposal_pilot/proposal-pilot/proposalpilot.db \
-    <render-ssh-user@render-ssh-host>:/data/proposalpilot.db
+# Upload a new DB from WSL
+sqlite3 proposalpilot.db "PRAGMA wal_checkpoint(FULL);"
+scp -i ~/.ssh/id_rsa_personal proposalpilot.db \
+    srv-d7buv6fkijhs73b1mkfg@ssh.oregon.render.com:/data/proposalpilot.db
+# Then restart service in Render dashboard
+
+# Reset beta users via Render Shell tab
+python -m backend.scraper.reset_beta_users
 ```
-After upload, restart the service from the Render dashboard so FastAPI picks up the new DB.
-
-### Step 4 — Verify
-1. Open `https://cory-garms.github.io/proposal-pilot/` — should show Login page
-2. Login as `cgarms@spectral.com` with your local password
-3. Dashboard should show solicitations populated from the uploaded DB
-4. Run a small alignment from Admin to confirm LLM calls work
 
 ---
 
