@@ -6,7 +6,7 @@ services:
     plan: starter          # $7/month — stays warm, required for persistent disk
     rootDir: .
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    startCommand: sh -c "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-10000}"
     healthCheckPath: /health
 
     disk:
