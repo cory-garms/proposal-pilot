@@ -1,9 +1,10 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { getProfiles } from '../api/client'
 
 export default function NavBar() {
   const { pathname } = useLocation()
+  const navigate = useNavigate()
   const isAdmin = sessionStorage.getItem('is_admin') === 'true'
 
   const [profiles, setProfiles] = useState([])
@@ -85,7 +86,7 @@ export default function NavBar() {
           onClick={() => {
             sessionStorage.removeItem('token')
             sessionStorage.removeItem('is_admin')
-            window.location.href = import.meta.env.BASE_URL + 'login'
+            navigate('/login')
           }}
           className="text-blue-300 hover:text-white text-xs transition-colors"
         >
