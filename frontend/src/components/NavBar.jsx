@@ -53,7 +53,7 @@ export default function NavBar() {
         </Link>
         {link('/', 'Dashboard')}
         {link('/solicitations', 'Solicitations')}
-        {link('/keywords', 'Keywords')}
+        {isAdmin && link('/keywords', 'Keywords')}
         {link('/capabilities', 'Capabilities')}
         {isAdmin && link('/admin', 'Admin')}
       </div>
