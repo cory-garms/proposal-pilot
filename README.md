@@ -1,5 +1,7 @@
 # ProposalPilot AI
 
+**Live:** https://cory-garms.github.io/proposal-pilot/
+
 RAG-based proposal automation engine for SBIR/STTR/BAA funding cycles. Scrapes agency solicitations from SBIR.gov, Grants.gov, and SAM.gov; scores them against user-defined technical capability profiles; and generates draft Technical Volumes and Commercialization Plans via configurable LLM providers.
 
 ## Stack
