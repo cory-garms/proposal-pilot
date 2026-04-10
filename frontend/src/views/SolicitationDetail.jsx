@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getSolicitation, getAlignment, createProject, triggerAlignment, watchSolicitation } from '../api/client'
+import { getSolicitation, getAlignment, createProject, triggerAlignment, watchSolicitation, getProfiles } from '../api/client'
 
 const scoreColor = (score) => {
   if (score >= 0.7) return 'border-green-400 bg-green-50'
@@ -41,7 +41,17 @@ export default function SolicitationDetail() {
 
   const fetchAlignment = useCallback(async () => {
     try {
-      const profileId = localStorage.getItem('profileId') || '1'
+      const isAdmin = sessionStorage.getItem('is_admin') === 'true'
+      let profileId
+      if (isAdmin) {
+        profileId = localStorage.getItem('adminProfileId') || null
+      }
+      if (!profileId) {
+        const profiles = await getProfiles()
+        const own = profiles.find(p => !p.shared)
+        profileId = own ? own.id : profiles[0]?.id
+      }
+      if (!profileId) return
       const a = await getAlignment(id, profileId)
       setAlignment(a)
     } catch (e) {

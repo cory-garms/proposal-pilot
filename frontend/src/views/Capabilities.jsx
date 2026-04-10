@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { getCapabilities, createCapability, updateCapability, deleteCapability, getProfiles, runAlignment, getAlignStatus } from '../api/client'
 
-const EMPTY_FORM = { name: '', description: '', keywords: '', profile_id: 1 }
+const EMPTY_FORM = (defaultProfileId) => ({ name: '', description: '', keywords: '', profile_id: defaultProfileId || 1 })
 
 function KeywordChips({ keywords }) {
   const visible = keywords.slice(0, 8)
@@ -21,11 +21,11 @@ function KeywordChips({ keywords }) {
   )
 }
 
-function CapabilityForm({ profiles, initial, onSave, onCancel }) {
+function CapabilityForm({ profiles, initial, defaultProfileId, onSave, onCancel }) {
   const [form, setForm] = useState(
     initial
       ? { ...initial, keywords: (initial.keywords || []).join(', ') }
-      : EMPTY_FORM
+      : EMPTY_FORM(defaultProfileId)
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -166,6 +166,7 @@ export default function Capabilities() {
   const [profiles, setProfiles] = useState([])
   const [loading, setLoading] = useState(true)
   const [profileFilter, setProfileFilter] = useState('all')
+  const [defaultProfileId, setDefaultProfileId] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState(null)
   const [scoring, setScoring] = useState(false)
@@ -182,7 +183,14 @@ export default function Capabilities() {
   }
 
   useEffect(() => {
-    getProfiles().then(setProfiles).catch(console.error)
+    getProfiles().then(ps => {
+      setProfiles(ps)
+      const own = ps.find(p => !p.shared)
+      if (own) {
+        setDefaultProfileId(own.id)
+        if (!isAdmin) setProfileFilter(String(own.id))
+      }
+    }).catch(console.error)
   }, [])
 
   useEffect(() => {
@@ -313,6 +321,7 @@ export default function Capabilities() {
         <CapabilityForm
           profiles={isAdmin ? profiles : profiles.filter(p => !p.shared)}
           initial={null}
+          defaultProfileId={profileFilter !== 'all' ? Number(profileFilter) : defaultProfileId}
           onSave={handleSave}
           onCancel={() => setShowAdd(false)}
         />

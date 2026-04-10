@@ -68,15 +68,19 @@ def get_dashboard_summary(
     }
 
     # Admin can pass profile_id to set the primary sort profile.
-    # Otherwise use the first owned (non-shared) profile.
+    # Otherwise use the first owned (non-shared) profile — but if it has no scores,
+    # fall back to the shared SSI profile so the dashboard isn't empty on first login.
     if profile_id and any(p["id"] == profile_id for p in profiles):
         primary_id = str(profile_id)
     else:
-        primary_profile = next(
-            (p for p in profiles if not p.get("shared")),
-            profiles[0] if profiles else None,
-        )
-        primary_id = str(primary_profile["id"]) if primary_profile else "1"
+        own_profile = next((p for p in profiles if not p.get("shared")), None)
+        if own_profile and profile_score_maps.get(own_profile["id"], {}).get("map"):
+            primary_id = str(own_profile["id"])
+        else:
+            # No personal scores yet — sort by shared profile (SSI)
+            shared_profile = next((p for p in profiles if p.get("shared")), None)
+            fallback = shared_profile or own_profile or (profiles[0] if profiles else None)
+            primary_id = str(fallback["id"]) if fallback else "1"
 
     solicitations = get_all_solicitations(
         limit=1000,
