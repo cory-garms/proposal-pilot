@@ -33,6 +33,7 @@ export default function SolicitationDetail() {
   const navigate = useNavigate()
   const [sol, setSol] = useState(null)
   const [alignment, setAlignment] = useState(null)
+  const [sharedAlignment, setSharedAlignment] = useState(null)
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [realigning, setRealigning] = useState(false)
@@ -42,18 +43,24 @@ export default function SolicitationDetail() {
   const fetchAlignment = useCallback(async () => {
     try {
       const isAdmin = sessionStorage.getItem('is_admin') === 'true'
+      const profiles = await getProfiles()
+      const shared = profiles.find(p => p.shared)
+
       let profileId
       if (isAdmin) {
         profileId = localStorage.getItem('adminProfileId') || null
       }
       if (!profileId) {
-        const profiles = await getProfiles()
         const own = profiles.find(p => !p.shared)
-        profileId = own ? own.id : profiles[0]?.id
+        profileId = own ? own.id : null
       }
-      if (!profileId) return
-      const a = await getAlignment(id, profileId)
-      setAlignment(a)
+
+      const fetches = []
+      if (profileId) fetches.push(getAlignment(id, profileId).then(a => setAlignment(a)).catch(console.error))
+      if (shared && (!profileId || shared.id !== profileId)) {
+        fetches.push(getAlignment(id, shared.id).then(a => setSharedAlignment(a)).catch(console.error))
+      }
+      await Promise.all(fetches)
     } catch (e) {
       console.error(e)
     }
@@ -188,7 +195,7 @@ export default function SolicitationDetail() {
       )}
 
       {/* Alignment Score Cards */}
-      {(alignment?.scores?.length > 0 || realigning) && (
+      {(alignment?.scores?.length > 0 || sharedAlignment?.scores?.length > 0 || realigning) && (
         <div className="mb-4">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
@@ -202,30 +209,66 @@ export default function SolicitationDetail() {
               {realigning ? 'Scoring...' : 'Re-run Alignment'}
             </button>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {alignment.scores.map((s) => (
-              <div key={s.capability_id} className={`border rounded-lg p-4 ${scoreColor(s.score)}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-semibold text-gray-800">{s.capability}</span>
-                  <div className="flex items-center gap-1.5">
-                    <div className={`w-2 h-2 rounded-full ${scoreBadgeBg(s.score)}`} />
-                    <span className={`text-sm font-mono font-bold ${scoreTextColor(s.score)}`}>
-                      {s.score.toFixed(2)}
-                    </span>
+
+          {alignment?.scores?.length > 0 && (
+            <div className="mb-4">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Your Profile</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {alignment.scores.map((s) => (
+                  <div key={s.capability_id} className={`border rounded-lg p-4 ${scoreColor(s.score)}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-semibold text-gray-800">{s.capability}</span>
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-2 h-2 rounded-full ${scoreBadgeBg(s.score)}`} />
+                        <span className={`text-sm font-mono font-bold ${scoreTextColor(s.score)}`}>
+                          {s.score.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="h-1.5 bg-white rounded-full overflow-hidden mb-2">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          s.score >= 0.7 ? 'bg-green-500' : s.score >= 0.4 ? 'bg-yellow-400' : 'bg-gray-300'
+                        }`}
+                        style={{ width: `${Math.round(s.score * 100)}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-600 leading-relaxed">{s.rationale}</p>
                   </div>
-                </div>
-                <div className="h-1.5 bg-white rounded-full overflow-hidden mb-2">
-                  <div
-                    className={`h-full rounded-full transition-all ${
-                      s.score >= 0.7 ? 'bg-green-500' : s.score >= 0.4 ? 'bg-yellow-400' : 'bg-gray-300'
-                    }`}
-                    style={{ width: `${Math.round(s.score * 100)}%` }}
-                  />
-                </div>
-                <p className="text-xs text-gray-600 leading-relaxed">{s.rationale}</p>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          )}
+
+          {sharedAlignment?.scores?.length > 0 && (
+            <div>
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">SSI (Shared)</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {sharedAlignment.scores.map((s) => (
+                  <div key={s.capability_id} className={`border rounded-lg p-4 ${scoreColor(s.score)}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-semibold text-gray-800">{s.capability}</span>
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-2 h-2 rounded-full ${scoreBadgeBg(s.score)}`} />
+                        <span className={`text-sm font-mono font-bold ${scoreTextColor(s.score)}`}>
+                          {s.score.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="h-1.5 bg-white rounded-full overflow-hidden mb-2">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          s.score >= 0.7 ? 'bg-green-500' : s.score >= 0.4 ? 'bg-yellow-400' : 'bg-gray-300'
+                        }`}
+                        style={{ width: `${Math.round(s.score * 100)}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-600 leading-relaxed">{s.rationale}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

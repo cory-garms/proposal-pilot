@@ -226,7 +226,6 @@ export default function SolicitationList() {
           >
             <option value="">All Sources</option>
             <option value="dod">DOD SBIR/STTR</option>
-            <option value="sbir">SBIR.gov</option>
             <option value="grants">Grants.gov</option>
             <option value="sam">SAM.gov</option>
           </select>

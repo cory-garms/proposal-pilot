@@ -188,7 +188,6 @@ export default function Capabilities() {
       const own = ps.find(p => !p.shared)
       if (own) {
         setDefaultProfileId(own.id)
-        if (!isAdmin) setProfileFilter(String(own.id))
       }
     }).catch(console.error)
   }, [])
