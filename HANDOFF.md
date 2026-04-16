@@ -32,16 +32,37 @@
 - Dashboard: `by_score` now sorts by `combined_score` (personal top + SSI top)
 - DOD SBIR/STTR: `POST /solicitations/scrape/dod` + Admin card wired in; 115 open topics in local DB
 
-**Day 4 — Push, clean live DB, onboard Raphael**
-- Push to GitHub → Render auto-deploy + GitHub Pages auto-deploy
-- SSH Render: run `python -m backend.scraper.purge_solicitations --commit` (once scorer finishes)
-- SSH Render: run `python -m backend.scraper.reset_beta_users` to wipe test data
-- Trigger DOD scrape + alignment from Admin page on live backend
-- Send Raphael onboarding doc + invite email
-- Monitor Render logs for 401s, errors
+**Day 4 (complete) — Live deploy, DB cleanup, beta launch**
+- Pushed to GitHub; Render + GitHub Pages deployed successfully
+- Fixed SPA basename bug: `window.location.reload()` on deep paths was stripping `/proposal-pilot/` prefix in 404 redirect — fixed in `frontend/index.html`
+- DB purged locally (9,995 → 690 solicitations), reset_beta_users run, clean DB uploaded to Render
+- Live DB verified: 690 solicitations, 13,800 scores, 4 users (cgarms admin + 3 beta), 2 profiles (Cory + SSI shared)
+- pcorlies@spectral.com created as non-admin user (Welcome!2026)
+- Onboarding doc written: `ONBOARDING_rpanfili.md`
+- **Raphael invite ready to send**
 
-### Before pushing — finish locally
-- [ ] Scorer must finish before running purge (stop it if still running, run purge, then re-score ~690 records)
+## Current Live State
+
+### Users (production)
+| Email | Role | Profile |
+|-------|------|---------|
+| cgarms@spectral.com | admin | Cory Garms (id=1) |
+| rpanfili@spectral.com | user | none — first login creates it |
+| dstelter@spectral.com | user | none — first login creates it |
+| rtaylor@spectral.com | user | none — first login creates it |
+| pcorlies@spectral.com | user | none — first login creates it |
+
+All non-admin passwords: `Welcome!2026`
+
+### DB
+- 690 solicitations (DOD SBIR/STTR + Grants.gov + SAM BAAs)
+- 13,800 score entries (SSI shared profile scored against all)
+- Nightly scheduler will score new solicitations automatically
+
+## Next Steps
+- Monitor Render logs after Raphael logs in
+- Send invites to dstelter + rtaylor when ready
+- Send invite to pcorlies@spectral.com when ready
 
 ### Known Issues / Deferred
 - **Capability auto-score on edit** — background alignment on `PATCH /capabilities/{id}` not verified end-to-end on production
